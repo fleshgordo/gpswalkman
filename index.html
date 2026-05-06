@@ -42,9 +42,23 @@
   .debug-toggle {
     margin-top: 2rem; font-size: 0.6rem; opacity: 0.3; cursor: pointer; text-decoration: underline;
   }
+  #startScreen {
+    position: fixed; inset: 0; background: #000; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; z-index: 100;
+  }
+  #startScreen h1 { margin-bottom: 3rem; }
+  #startBtn {
+    background: #fff; color: #000; border: none; font-family: 'Courier New', monospace;
+    font-size: 1rem; padding: 1rem 3rem; cursor: pointer; text-transform: uppercase;
+    letter-spacing: 0.2em;
+  }
 </style>
 </head>
 <body>
+  <div id="startScreen">
+    <h1>GPS Walkman</h1>
+    <button id="startBtn">Start</button>
+  </div>
   <h1>GPS Walkman</h1>
   <div id="status" class="status">initializing...</div>
   <div class="info">
@@ -70,6 +84,17 @@ let waypoints = [];
 let triggered = new Set();
 let debugMode = false;
 let checkInterval = null;
+let started = false;
+
+document.getElementById('startBtn').onclick = () => {
+  const audio = new Audio('alert.wav');
+  audio.volume = 0.01;
+  audio.play().then(() => { audio.pause(); audio.currentTime = 0; }).catch(() => {});
+  document.getElementById('startScreen').style.display = 'none';
+  started = true;
+  checkGPS();
+  checkInterval = setInterval(checkGPS, 5000);
+};
 
 function checkGPS() {
   navigator.geolocation.getCurrentPosition(handlePosition, handleError, {
@@ -144,6 +169,7 @@ function playSound(soundPath) {
 }
 
 function handlePosition(pos) {
+  if (!started) return;
   const { latitude, longitude } = pos.coords;
   const statusEl = document.getElementById('status');
   if (!debugMode) {
@@ -191,8 +217,6 @@ async function init() {
     showError('Geolocation not supported');
     return;
   }
-  checkGPS();
-  checkInterval = setInterval(checkGPS, 5000);
 }
 
 init();
