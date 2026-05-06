@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#000000">
+<link rel="manifest" href="manifest.json">
+<title>GPS Walkman</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Courier New', monospace;
+    background: #000;
+    color: #fff;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+  }
+  h1 { font-size: 1.2rem; letter-spacing: 0.2em; margin-bottom: 2rem; text-transform: uppercase; }
+  .status { font-size: 0.8rem; opacity: 0.5; margin-bottom: 2rem; }
+  .status.active { opacity: 1; }
+  .status.triggered { color: #fff; opacity: 1; animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: 0.3; } }
+  .info { text-align: center; line-height: 2; }
+  .info .label { opacity: 0.4; font-size: 0.7rem; text-transform: uppercase; }
+  .info .value { font-size: 1rem; }
+  .nearest { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #333; }
+  .error { color: #fff; border: 1px solid #fff; padding: 1rem; margin-top: 1rem; font-size: 0.8rem; }
+  .debug { display: none; margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #333; width: 100%; max-width: 300px; }
+  .debug input {
+    background: #111; border: 1px solid #333; color: #fff; font-family: 'Courier New', monospace;
+    font-size: 0.8rem; padding: 0.4rem; width: 100%; margin-bottom: 0.5rem;
+  }
+  .debug button {
+    background: #fff; color: #000; border: none; font-family: 'Courier New', monospace;
+    font-size: 0.7rem; padding: 0.4rem 1rem; cursor: pointer; text-transform: uppercase;
+    letter-spacing: 0.1em; width: 100%;
+  }
+  .debug-toggle {
+    margin-top: 2rem; font-size: 0.6rem; opacity: 0.3; cursor: pointer; text-decoration: underline;
+  }
+</style>
+</head>
+<body>
+  <h1>GPS Walkman</h1>
+  <div id="status" class="status">initializing...</div>
+  <div class="info">
+    <div><span class="label">Lat</span><br><span id="lat" class="value">--</span></div>
+    <div><span class="label">Lon</span><br><span id="lon" class="value">--</span></div>
+    <div class="nearest">
+      <div><span class="label">Nearest</span><br><span id="nearest" class="value">--</span></div>
+      <div><span class="label">Distance</span><br><span id="distance" class="value">--</span></div>
+    </div>
+  </div>
+  <div id="error" class="error" style="display:none"></div>
+  <div class="debug-toggle" id="debugToggle">debug mode</div>
+  <div class="debug" id="debugPanel">
+    <input type="number" step="any" id="debugLat" placeholder="latitude">
+    <input type="number" step="any" id="debugLon" placeholder="longitude">
+    <button id="debugSet">set position</button>
+    <button id="debugReset" style="margin-top: 0.5rem; background: #000; color: #fff; border: 1px solid #fff;">reset triggers</button>
+  </div>
+
+<script>
+const R = 6371e3;
+let waypoints = [];
+let triggered = new Set();
+let debugMode = false;
+let checkInterval = null;
+
+function checkGPS() {
+  navigator.geolocation.getCurrentPosition(handlePosition, handleError, {
+    enableHighAccuracy: true,
+    maximumAge: 0,
+    timeout: 5000
+  });
+}
+
+document.getElementById('debugToggle').onclick = () => {
+  debugMode = !debugMode;
+  document.getElementById('debugPanel').style.display = debugMode ? 'block' : 'none';
+  document.getElementById('debugToggle').textContent = debugMode ? 'live mode' : 'debug mode';
+  if (debugMode) {
+    clearInterval(checkInterval);
+    checkInterval = null;
+    document.getElementById('status').textContent = 'debug mode on';
+    document.getElementById('status').className = 'status active';
+  } else if (!checkInterval) {
+    checkGPS();
+    checkInterval = setInterval(checkGPS, 5000);
+  }
+};
+
+document.getElementById('debugSet').onclick = () => {
+  const lat = parseFloat(document.getElementById('debugLat').value);
+  const lon = parseFloat(document.getElementById('debugLon').value);
+  if (isNaN(lat) || isNaN(lon)) return;
+  handlePosition({ coords: { latitude: lat, longitude: lon } });
+};
+
+document.getElementById('debugReset').onclick = () => {
+  triggered.clear();
+  document.getElementById('status').textContent = 'triggers reset';
+  document.getElementById('status').className = 'status active';
+};
+
+function haversine(lat1, lon1, lat2, lon2) {
+  const toRad = x => x * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+async function loadWaypoints() {
+  try {
+    const res = await fetch('data.json');
+    waypoints = await res.json();
+    document.getElementById('status').textContent = `loaded ${waypoints.length} waypoint(s)`;
+  } catch (e) {
+    showError('Failed to load data.json');
+  }
+}
+
+function showError(msg) {
+  const el = document.getElementById('error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function updateUI(lat, lon, nearest, dist) {
+  document.getElementById('lat').textContent = lat.toFixed(6);
+  document.getElementById('lon').textContent = lon.toFixed(6);
+  document.getElementById('nearest').textContent = nearest || '--';
+  document.getElementById('distance').textContent = dist !== null ? `${dist.toFixed(0)}m` : '--';
+}
+
+function playSound(soundPath) {
+  const audio = new Audio(soundPath);
+  audio.play().catch(() => {});
+}
+
+function handlePosition(pos) {
+  const { latitude, longitude } = pos.coords;
+  const statusEl = document.getElementById('status');
+  if (!debugMode) {
+    statusEl.textContent = 'watching';
+    statusEl.className = 'status active';
+  }
+
+  let nearest = null;
+  let minDist = Infinity;
+
+  for (const wp of waypoints) {
+    const dist = haversine(latitude, longitude, wp.lat, wp.lon);
+    if (dist < minDist) {
+      minDist = dist;
+      nearest = wp.label || `${wp.lat}, ${wp.lon}`;
+    }
+    if (dist <= wp.radius && !triggered.has(wp.label)) {
+      triggered.add(wp.label);
+      playSound(wp.sound);
+      statusEl.textContent = `triggered: ${nearest}`;
+      statusEl.className = 'status triggered';
+      setTimeout(() => { statusEl.className = 'status active'; }, 3000);
+    }
+  }
+
+  updateUI(latitude, longitude, nearest, minDist === Infinity ? null : minDist);
+}
+
+function handleError(err) {
+  const messages = {
+    1: 'Location permission denied',
+    2: 'Position unavailable',
+    3: 'Timeout'
+  };
+  showError(messages[err.code] || 'Unknown error');
+  document.getElementById('status').textContent = 'error';
+}
+
+async function init() {
+  await loadWaypoints();
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js');
+  }
+  if (!navigator.geolocation) {
+    showError('Geolocation not supported');
+    return;
+  }
+  checkGPS();
+  checkInterval = setInterval(checkGPS, 5000);
+}
+
+init();
+</script>
+</body>
+</html>

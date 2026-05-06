@@ -1,0 +1,9 @@
+{
+  "name": "GPS Walkman",
+  "short_name": "Walkman",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "orientation": "portrait"
+}
