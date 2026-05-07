@@ -5,5 +5,12 @@
     "radius": 300,
     "sound": "alert.wav",
     "label": "HSLU 745"
+  },
+  {
+    "lat": 47.069967583584834,
+    "lon": 8.278421325419655,
+    "radius": 100,
+    "sound": "alert.wav",
+    "label": "HSLU 742"
   }
 ]
